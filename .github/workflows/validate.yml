@@ -12,7 +12,7 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate package and scripts
         run: |
           chmod +x install uninstall test bin/completion-notify scripts/validate-pack
