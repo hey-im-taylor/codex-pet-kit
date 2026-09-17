@@ -1,0 +1,17 @@
+#!/bin/zsh
+
+set -eu
+
+readonly repo_dir="${0:A:h}"
+
+"$repo_dir/scripts/validate-pack" "$repo_dir/packs/navi"
+/bin/zsh -n "$repo_dir/install" "$repo_dir/uninstall" "$repo_dir/test" "$repo_dir/bin/completion-notify"
+
+if [[ "${1:-}" == "--audio" ]]; then
+  installed_hook="${CODEX_HOME:-$HOME/.codex}/hooks/codex-pet-kit-notify"
+  [[ -x "$installed_hook" ]] || { /usr/bin/printf 'Install a sound before using --audio.\n' >&2; exit 1; }
+  "$installed_hook" test
+  /usr/bin/printf 'Audio test completed.\n'
+fi
+
+/usr/bin/printf 'All local checks passed.\n'

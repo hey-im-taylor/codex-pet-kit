@@ -1,0 +1,38 @@
+#!/bin/zsh
+
+set -eu
+
+pack_dir="${1:-}"
+if [[ -z "$pack_dir" ]]; then
+  /usr/bin/printf 'Usage: %s PACK_DIRECTORY\n' "$0" >&2
+  exit 2
+fi
+
+metadata="$pack_dir/pet.json"
+spritesheet="$pack_dir/spritesheet.webp"
+
+[[ -r "$metadata" ]] || { /usr/bin/printf 'Missing %s\n' "$metadata" >&2; exit 1; }
+[[ -r "$spritesheet" ]] || { /usr/bin/printf 'Missing %s\n' "$spritesheet" >&2; exit 1; }
+
+pet_id="$(/usr/bin/plutil -extract id raw -o - "$metadata")"
+display_name="$(/usr/bin/plutil -extract displayName raw -o - "$metadata")"
+version="$(/usr/bin/plutil -extract spriteVersionNumber raw -o - "$metadata")"
+sheet_path="$(/usr/bin/plutil -extract spritesheetPath raw -o - "$metadata")"
+
+[[ "$pet_id" =~ '^[a-z0-9][a-z0-9-]*$' ]] || { /usr/bin/printf 'Invalid pet id: %s\n' "$pet_id" >&2; exit 1; }
+[[ -n "$display_name" ]] || { /usr/bin/printf 'displayName must not be empty\n' >&2; exit 1; }
+[[ "$version" == "2" ]] || { /usr/bin/printf 'Expected spriteVersionNumber 2, got %s\n' "$version" >&2; exit 1; }
+[[ "$sheet_path" == "spritesheet.webp" ]] || { /usr/bin/printf 'Expected spritesheetPath spritesheet.webp\n' >&2; exit 1; }
+
+image_info="$(/usr/bin/sips -g pixelWidth -g pixelHeight -g format "$spritesheet" 2>/dev/null)"
+width="$(/usr/bin/printf '%s\n' "$image_info" | /usr/bin/awk '/pixelWidth:/ {print $2}')"
+height="$(/usr/bin/printf '%s\n' "$image_info" | /usr/bin/awk '/pixelHeight:/ {print $2}')"
+format="$(/usr/bin/printf '%s\n' "$image_info" | /usr/bin/awk '/format:/ {print $2}')"
+
+[[ "$width" == "1536" && "$height" == "2288" ]] || {
+  /usr/bin/printf 'Expected 1536x2288 spritesheet, got %sx%s\n' "$width" "$height" >&2
+  exit 1
+}
+[[ "$format" == "webp" ]] || { /usr/bin/printf 'Expected WebP spritesheet, got %s\n' "$format" >&2; exit 1; }
+
+/usr/bin/printf 'Validated %s (%s): v2, %sx%s WebP\n' "$display_name" "$pet_id" "$width" "$height"

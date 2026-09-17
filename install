@@ -1,0 +1,145 @@
+#!/bin/zsh
+
+set -eu
+umask 077
+
+readonly repo_dir="${0:A:h}"
+readonly pack_dir="$repo_dir/packs/navi"
+readonly claude_hook_editor="$repo_dir/scripts/update-claude-hook.js"
+
+sound_source=""
+enable_claude=0
+
+usage() {
+  /usr/bin/printf '%s\n' \
+    'Usage: ./install [--sound /path/to/alert.wav] [--claude-code]' \
+    '' \
+    'Installs the bundled Codex pet. A sound is optional and is never downloaded.' \
+    'Use --claude-code to add the same sound to local Claude Code Stop events.'
+}
+
+while (( $# > 0 )); do
+  case "$1" in
+    --sound)
+      (( $# >= 2 )) || { /usr/bin/printf '%s\n' '--sound requires a path' >&2; exit 2; }
+      sound_source="$2"
+      shift 2
+      ;;
+    --claude-code)
+      enable_claude=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      /usr/bin/printf 'Unknown option: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+[[ "$(/usr/bin/uname -s)" == "Darwin" ]] || { /usr/bin/printf 'This release supports macOS only.\n' >&2; exit 1; }
+"$repo_dir/scripts/validate-pack" "$pack_dir"
+
+if [[ -n "$sound_source" ]]; then
+  [[ -r "$sound_source" ]] || { /usr/bin/printf 'Cannot read sound: %s\n' "$sound_source" >&2; exit 1; }
+  /usr/bin/afinfo "$sound_source" >/dev/null 2>&1 || { /usr/bin/printf 'Unsupported audio file: %s\n' "$sound_source" >&2; exit 1; }
+fi
+
+readonly petkit_codex_home="${CODEX_HOME:-$HOME/.codex}"
+readonly claude_home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+readonly timestamp="$(/bin/date +%Y%m%d-%H%M%S)"
+readonly backup_dir="$petkit_codex_home/pet-kit-backups/$timestamp"
+readonly pet_destination="$petkit_codex_home/pets/navi"
+readonly hook_destination="$petkit_codex_home/hooks/codex-pet-kit-notify"
+readonly sound_destination="$petkit_codex_home/sounds/codex-pet-kit-alert.wav"
+readonly codex_config="$petkit_codex_home/config.toml"
+readonly claude_settings="$claude_home/settings.json"
+
+/bin/mkdir -p "$backup_dir" "$petkit_codex_home/pets" "$petkit_codex_home/hooks" "$petkit_codex_home/sounds"
+
+if [[ -e "$pet_destination" ]]; then
+  /bin/cp -R "$pet_destination" "$backup_dir/navi-pet"
+fi
+/bin/mkdir -p "$pet_destination"
+/bin/cp "$pack_dir/pet.json" "$pack_dir/spritesheet.webp" "$pet_destination/"
+/bin/chmod 700 "$pet_destination"
+/bin/chmod 600 "$pet_destination/pet.json" "$pet_destination/spritesheet.webp"
+
+codex_notification_status="not requested"
+claude_notification_status="not requested"
+
+if [[ -n "$sound_source" ]]; then
+  /bin/cp "$repo_dir/bin/completion-notify" "$hook_destination"
+  /bin/cp "$sound_source" "$sound_destination"
+  /bin/chmod 700 "$hook_destination"
+  /bin/chmod 600 "$sound_destination"
+
+  /bin/mkdir -p "$petkit_codex_home"
+  [[ -e "$codex_config" ]] || /usr/bin/touch "$codex_config"
+
+  if /usr/bin/grep -Eq '^[[:space:]]*notify[[:space:]]*=' "$codex_config"; then
+    if /usr/bin/grep -Fq "$hook_destination" "$codex_config"; then
+      codex_notification_status="already configured"
+    else
+      codex_notification_status="not changed: existing notify command detected"
+    fi
+  else
+    if [[ -s "$codex_config" ]]; then
+      /bin/cp "$codex_config" "$backup_dir/config.toml"
+    fi
+    escaped_hook="${hook_destination//\\/\\\\}"
+    escaped_hook="${escaped_hook//\"/\\\"}"
+    temporary_config="$(/usr/bin/mktemp "$petkit_codex_home/config.toml.petkit.XXXXXX")"
+    /usr/bin/awk -v hook="$escaped_hook" '
+      BEGIN { inserted = 0 }
+      !inserted && /^\[/ {
+        print "# >>> codex-pet-kit"
+        print "notify = [\"" hook "\", \"codex\"]"
+        print "# <<< codex-pet-kit"
+        print ""
+        inserted = 1
+      }
+      { print }
+      END {
+        if (!inserted) {
+          if (NR > 0) print ""
+          print "# >>> codex-pet-kit"
+          print "notify = [\"" hook "\", \"codex\"]"
+          print "# <<< codex-pet-kit"
+        }
+      }
+    ' "$codex_config" > "$temporary_config"
+    /bin/mv "$temporary_config" "$codex_config"
+    /bin/chmod 600 "$codex_config"
+    codex_notification_status="configured"
+  fi
+
+  if (( enable_claude == 1 )); then
+    /bin/mkdir -p "$claude_home"
+    [[ -e "$claude_settings" ]] || /usr/bin/printf '{}\n' > "$claude_settings"
+    /bin/cp "$claude_settings" "$backup_dir/claude-settings.json"
+    /usr/bin/osascript -l JavaScript "$claude_hook_editor" add "$claude_settings" "$hook_destination" >/dev/null
+    /bin/chmod 600 "$claude_settings"
+    claude_notification_status="configured for local Claude Code"
+  fi
+fi
+
+/usr/bin/printf '%s\n' \
+  '' \
+  'Installed Navi pet.' \
+  "Codex sound: $codex_notification_status" \
+  "Claude Code sound: $claude_notification_status" \
+  "Backups: $backup_dir" \
+  '' \
+  'Next: restart Codex, then open Settings > Pets > Refresh and select Navi.'
+
+if [[ "$codex_notification_status" == "not changed: existing notify command detected" ]]; then
+  /usr/bin/printf '%s\n' \
+    '' \
+    'Your existing Codex notify command was preserved. See docs/troubleshooting.md' \
+    'for safe manual chaining; the installer will never overwrite it.'
+fi

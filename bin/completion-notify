@@ -1,0 +1,93 @@
+#!/bin/zsh
+
+set -u
+umask 077
+
+readonly petkit_codex_home="${CODEX_HOME:-$HOME/.codex}"
+readonly sound_file="${PETKIT_SOUND_FILE:-$petkit_codex_home/sounds/codex-pet-kit-alert.wav}"
+readonly sound_player="${PETKIT_SOUND_PLAYER:-/usr/bin/afplay}"
+readonly state_dir="${PETKIT_STATE_DIR:-$petkit_codex_home/state/codex-pet-kit}"
+
+json_raw() {
+  local payload="$1"
+  local key="$2"
+  /usr/bin/printf '%s' "$payload" | /usr/bin/plutil -extract "$key" raw -o - - 2>/dev/null
+}
+
+json_value() {
+  local payload="$1"
+  local key="$2"
+  /usr/bin/printf '%s' "$payload" | /usr/bin/plutil -extract "$key" json -o - - 2>/dev/null
+}
+
+play_sound() {
+  [[ -r "$sound_file" && -x "$sound_player" ]] || return 0
+
+  if [[ "${PETKIT_TEST_SYNC:-0}" == "1" ]]; then
+    "$sound_player" "$sound_file" </dev/null >/dev/null 2>&1 || true
+  else
+    /usr/bin/nohup "$sound_player" "$sound_file" </dev/null >/dev/null 2>&1 &
+  fi
+}
+
+play_once() {
+  local event_key="$1"
+  local event_hash
+  local marker
+
+  /bin/mkdir -p "$state_dir" 2>/dev/null || return 1
+  /bin/chmod 700 "$state_dir" 2>/dev/null || true
+  /usr/bin/find "$state_dir" -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec /bin/rmdir {} + 2>/dev/null || true
+
+  event_hash="$(/usr/bin/printf '%s' "$event_key" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')"
+  [[ -n "$event_hash" ]] || return 1
+  marker="$state_dir/$event_hash"
+  /bin/mkdir "$marker" 2>/dev/null
+}
+
+mode="${1:-}"
+if (( $# > 0 )); then
+  shift
+fi
+
+case "$mode" in
+  codex)
+    payload="${1:-}"
+    event_type="$(json_raw "$payload" type || true)"
+    [[ "$event_type" == "agent-turn-complete" ]] || exit 0
+
+    thread_id="$(json_raw "$payload" thread-id || true)"
+    turn_id="$(json_raw "$payload" turn-id || true)"
+    if [[ -n "$thread_id" && -n "$turn_id" ]]; then
+      play_once "codex:$thread_id:$turn_id" && play_sound
+    else
+      play_sound
+    fi
+    ;;
+  claude)
+    payload="$(/bin/cat)"
+    event_type="$(json_raw "$payload" hook_event_name || true)"
+    [[ "$event_type" == "Stop" ]] || exit 0
+
+    agent_id="$(json_raw "$payload" agent_id || true)"
+    background_tasks="$(json_value "$payload" background_tasks || true)"
+    session_crons="$(json_value "$payload" session_crons || true)"
+    [[ -z "$agent_id" ]] || exit 0
+    [[ -z "$background_tasks" || "$background_tasks" == "[]" ]] || exit 0
+    [[ -z "$session_crons" || "$session_crons" == "[]" ]] || exit 0
+
+    session_id="$(json_raw "$payload" session_id || true)"
+    prompt_id="$(json_raw "$payload" prompt_id || true)"
+    if [[ -n "$session_id" && -n "$prompt_id" ]]; then
+      play_once "claude:$session_id:$prompt_id" && play_sound
+    else
+      play_sound
+    fi
+    ;;
+  test)
+    PETKIT_TEST_SYNC=1 play_sound
+    ;;
+  *)
+    exit 0
+    ;;
+esac

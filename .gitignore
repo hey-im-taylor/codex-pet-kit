@@ -1,0 +1,8 @@
+.DS_Store
+*.wav
+*.mp3
+*.m4a
+*.aiff
+*.bak
+*.tmp
+pet-kit-backups/

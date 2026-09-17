@@ -1,0 +1,49 @@
+#!/bin/zsh
+
+set -eu
+umask 077
+
+readonly repo_dir="${0:A:h}"
+readonly petkit_codex_home="${CODEX_HOME:-$HOME/.codex}"
+readonly claude_home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+readonly timestamp="$(/bin/date +%Y%m%d-%H%M%S)"
+readonly recovery_dir="$petkit_codex_home/pet-kit-backups/uninstalled-$timestamp"
+readonly codex_config="$petkit_codex_home/config.toml"
+readonly claude_settings="$claude_home/settings.json"
+readonly hook_destination="$petkit_codex_home/hooks/codex-pet-kit-notify"
+
+/bin/mkdir -p "$recovery_dir"
+
+for target in \
+  "$petkit_codex_home/pets/navi" \
+  "$petkit_codex_home/sounds/codex-pet-kit-alert.wav" \
+  "$petkit_codex_home/state/codex-pet-kit" \
+  "$hook_destination"; do
+  if [[ -e "$target" ]]; then
+    name="${target:t}"
+    /bin/mv "$target" "$recovery_dir/$name"
+  fi
+done
+
+if [[ -r "$codex_config" ]] && /usr/bin/grep -Fq '# >>> codex-pet-kit' "$codex_config"; then
+  /bin/cp "$codex_config" "$recovery_dir/config.toml.before-uninstall"
+  temporary_config="$(/usr/bin/mktemp "$petkit_codex_home/config.toml.petkit.XXXXXX")"
+  /usr/bin/awk '
+    /^# >>> codex-pet-kit$/ { skip = 1; next }
+    /^# <<< codex-pet-kit$/ { skip = 0; next }
+    !skip { print }
+  ' "$codex_config" > "$temporary_config"
+  /bin/mv "$temporary_config" "$codex_config"
+  /bin/chmod 600 "$codex_config"
+fi
+
+if [[ -r "$claude_settings" ]]; then
+  /bin/cp "$claude_settings" "$recovery_dir/claude-settings.json.before-uninstall"
+  /usr/bin/osascript -l JavaScript "$repo_dir/scripts/update-claude-hook.js" remove "$claude_settings" "$hook_destination" >/dev/null
+  /bin/chmod 600 "$claude_settings"
+fi
+
+/usr/bin/printf '%s\n' \
+  'Codex Pet Kit has been uninstalled.' \
+  "Removed files were moved to: $recovery_dir" \
+  'Restart Codex and Claude Code to finish.'

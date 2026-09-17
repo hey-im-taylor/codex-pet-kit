@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Navi animation preview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: #101319;
+        color: #edf6ff;
+      }
+      body { margin: 0; padding: 32px; }
+      h1 { margin: 0 0 8px; font-size: 24px; }
+      p { margin: 0 0 28px; color: #9baaba; }
+      main {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+      figure {
+        margin: 0;
+        padding: 16px;
+        border: 1px solid #27313d;
+        border-radius: 12px;
+        background: #171c24;
+      }
+      img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: contain;
+        image-rendering: pixelated;
+        border-radius: 8px;
+        background: #0c0f14;
+      }
+      figcaption { margin-top: 12px; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <h1>Navi animation preview</h1>
+    <p>Each card is one runtime state. Look directions cycles all 16 poses.</p>
+    <main>
+      <figure><img src="animations/00-idle.gif" alt="Idle" /><figcaption>00 · Idle</figcaption></figure>
+      <figure><img src="animations/01-running-right.gif" alt="Fly right" /><figcaption>01 · Fly right</figcaption></figure>
+      <figure><img src="animations/02-running-left.gif" alt="Fly left" /><figcaption>02 · Fly left</figcaption></figure>
+      <figure><img src="animations/03-wave.gif" alt="Wave" /><figcaption>03 · Wave</figcaption></figure>
+      <figure><img src="animations/04-jump.gif" alt="Jump" /><figcaption>04 · Jump</figcaption></figure>
+      <figure><img src="animations/05-failed.gif" alt="Failed" /><figcaption>05 · Failed</figcaption></figure>
+      <figure><img src="animations/06-waiting.gif" alt="Waiting" /><figcaption>06 · Waiting</figcaption></figure>
+      <figure><img src="animations/07-working.gif" alt="Working" /><figcaption>07 · Working</figcaption></figure>
+      <figure><img src="animations/08-review.gif" alt="Review" /><figcaption>08 · Review</figcaption></figure>
+      <figure><img src="animations/09-look-directions.gif" alt="Look directions" /><figcaption>09–10 · Look directions</figcaption></figure>
+    </main>
+  </body>
+</html>
